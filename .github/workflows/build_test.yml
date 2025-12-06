@@ -1,0 +1,24 @@
+name: Build & Test Vendor
+
+on:
+  push:
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'pubspec.yaml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.13.0'
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Run unit tests
+        run: flutter test --coverage
+      - name: Build APK (vendor flavor)
+        run: flutter build apk -t lib/main_vendor.dart

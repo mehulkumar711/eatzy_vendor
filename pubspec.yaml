@@ -1,0 +1,55 @@
+name: eatzy_vendor
+description: Eatzy Vendor App (voice-first) - Standalone vendor flavor
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.5.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+
+  # Networking, storage, bloc, audio
+  dio: any
+  flutter_bloc: any
+  hive: any
+  hive_flutter: any
+  firebase_core: any
+  firebase_messaging: any
+  permission_handler: any
+  just_audio: any
+  speech_to_text: any
+  flutter_tts: any
+  google_maps_flutter: any
+  cached_network_image: any
+  image_picker: any
+  flutter_image_compress: ^2.3.0
+  uuid: any
+  connectivity_plus: any
+  path_provider: any
+  tus_client: any
+  cross_file: any
+  equatable: any
+  bloc: ^9.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mocktail: ^1.0.4
+  integration_test:
+    sdk: flutter
+  build_runner: any
+  flutter_lints: any
+  bloc_test: ^10.0.0
+  http_mock_adapter: ^0.6.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/sounds/tasty_ping.mp3
+    - assets/images/preset_catalog/shop_placeholder.png
+  generate: true

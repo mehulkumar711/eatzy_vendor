@@ -1,0 +1,158 @@
+name: CI - Tests, Analysis, Integration
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: "3.19.0"
+  API_URL: http://10.0.2.2:3000
+
+jobs:
+
+  analyze:
+    name: Dart Analyzer & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Dart format check
+        run: |
+          dart format --set-exit-if-changed .
+      - name: Dart analyze
+        run: flutter analyze
+
+  unit-tests:
+    name: Flutter unit & widget tests
+    runs-on: ubuntu-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Flutter pub get
+        run: flutter pub get
+      - name: Run unit & widget tests
+        run: flutter test --coverage
+
+  android-tests:
+    name: Android Instrumentation Matrix
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    strategy:
+      matrix:
+        api-level: [29, 31]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install mock server deps
+        working-directory: server
+        run: npm install
+      - name: Start Node Mock Server
+        working-directory: server
+        run: nohup node upload_server.js > mock_server.log 2>&1 & echo "Mock server started"
+      - name: Start Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-options: -no-snapshot -noaudio -no-boot-anim -no-window -gpu swiftshader_indirect
+          disable-animations: true
+          script: ./gradlew connectedAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.eatzy.eatzy_vendor
+      - name: Upload test-results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-logs-api-${{ matrix.api-level }}
+          path: |
+            server/mock_server.log
+            android/app/build/reports/
+            /home/runner/.android/avd/*
+
+  integration:
+    name: Integration Tests (Drive) + Artifacts
+    runs-on: ubuntu-latest
+    needs: android-tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install mock server deps
+        working-directory: server
+        run: npm install
+      - name: Start Node Mock Server
+        working-directory: server
+        run: nohup node upload_server.js > mock_server.log 2>&1 & echo "Mock server started"
+      - name: Start Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 31
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-options: -no-snapshot -noaudio -no-boot-anim -no-window -gpu swiftshader_indirect
+          disable-animations: true
+          script: |
+            flutter pub get
+            flutter drive --driver=test_driver/integration_driver.dart --target=integration_test/item_upload_e2e_test.dart --dart-define=EATZY_API_BASE_URL=${API_URL}
+      - name: Upload integration logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs
+          path: |
+            server/mock_server.log
+            build/**

@@ -1,0 +1,50 @@
+{
+    "vendors": [
+        {
+            "vendorId": "vendor_001",
+            "storeName": "Bharuch Dabeli",
+            "ownerName": "Raj",
+            "commissionPercent": 20,
+            "menu": [
+                {
+                    "id": "i1",
+                    "name": "Dabeli",
+                    "price": 40,
+                    "veg": true,
+                    "stock": 50
+                },
+                {
+                    "id": "i2",
+                    "name": "Vada Pav",
+                    "price": 30,
+                    "veg": true,
+                    "stock": 30
+                }
+            ],
+            "payouts": [
+                {
+                    "id": "p1",
+                    "amount": 1000,
+                    "status": "cleared",
+                    "date": "2025-11-30"
+                }
+            ]
+        }
+    ],
+    "orders": [
+        {
+            "id": "order_001",
+            "vendorId": "vendor_001",
+            "isParcel": true,
+            "items": [
+                {
+                    "name": "Dabeli",
+                    "quantity": 2
+                }
+            ],
+            "total": 80,
+            "status": "pending",
+            "createdAt": "2025-12-05T12:00:00Z"
+        }
+    ]
+}
