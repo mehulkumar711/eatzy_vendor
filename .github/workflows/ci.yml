@@ -49,6 +49,13 @@ jobs:
         run: flutter pub get
       - name: Run unit & widget tests
         run: flutter test --coverage
+      - name: Upload Flutter coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          flags: flutter
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   android-tests:
     name: Android Instrumentation Matrix
@@ -90,6 +97,27 @@ jobs:
       - name: Start Node Mock Server
         working-directory: server
         run: nohup node upload_server.js > mock_server.log 2>&1 & echo "Mock server started"
+      
+      - name: Add retry script
+        run: |
+          cat << 'EOF' > retry.sh
+          #!/usr/bin/env bash
+          set -e
+          cmd="$@"
+          max=3
+          count=1
+          until $cmd; do
+            if [ $count -ge $max ]; then
+              echo "❌ Command failed after $max attempts: $cmd"
+              exit 1
+            fi
+            echo "⚠️ Attempt $count failed. Retrying..."
+            count=$((count+1))
+            sleep 5
+          done
+          EOF
+          chmod +x retry.sh
+
       - name: Start Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -99,7 +127,33 @@ jobs:
           profile: pixel_5
           emulator-options: -no-snapshot -noaudio -no-boot-anim -no-window -gpu swiftshader_indirect
           disable-animations: true
-          script: ./gradlew connectedAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.eatzy.eatzy_vendor
+          script: |
+            # Health Checks
+            adb wait-for-device
+            adb shell "getprop sys.boot_completed" 
+            adb shell "dumpsys battery"
+            adb shell "logcat -G 10M"
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
+            
+            # Run Tests with Retry
+            ./retry.sh ./gradlew connectedAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.eatzy.eatzy_vendor
+            # Run Jacoco Report
+            ./gradlew jacocoTestReport
+
+      - name: Dump logcat on failure
+        if: failure()
+        run: adb logcat -d > logcat.txt
+
+      - name: Upload Jacoco Android coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: android/app/build/reports/jacoco/jacocoTestReport/xml/report.xml
+          flags: android
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
       - name: Upload test-results
         if: failure()
         uses: actions/upload-artifact@v4
@@ -109,6 +163,7 @@ jobs:
             server/mock_server.log
             android/app/build/reports/
             /home/runner/.android/avd/*
+            logcat.txt
 
   integration:
     name: Integration Tests (Drive) + Artifacts
@@ -136,6 +191,27 @@ jobs:
       - name: Start Node Mock Server
         working-directory: server
         run: nohup node upload_server.js > mock_server.log 2>&1 & echo "Mock server started"
+
+      - name: Add retry script
+        run: |
+          cat << 'EOF' > retry.sh
+          #!/usr/bin/env bash
+          set -e
+          cmd="$@"
+          max=3
+          count=1
+          until $cmd; do
+            if [ $count -ge $max ]; then
+              echo "❌ Command failed after $max attempts: $cmd"
+              exit 1
+            fi
+            echo "⚠️ Attempt $count failed. Retrying..."
+            count=$((count+1))
+            sleep 5
+          done
+          EOF
+          chmod +x retry.sh
+
       - name: Start Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -146,8 +222,17 @@ jobs:
           emulator-options: -no-snapshot -noaudio -no-boot-anim -no-window -gpu swiftshader_indirect
           disable-animations: true
           script: |
+            # Health Check
+            adb wait-for-device
+            adb shell "getprop sys.boot_completed"
+            
             flutter pub get
-            flutter drive --driver=test_driver/integration_driver.dart --target=integration_test/item_upload_e2e_test.dart --dart-define=EATZY_API_BASE_URL=${API_URL}
+            ./retry.sh flutter drive --driver=test_driver/integration_driver.dart --target=integration_test/item_upload_e2e_test.dart --dart-define=EATZY_API_BASE_URL=${API_URL}
+
+      - name: Dump logcat on failure
+        if: failure()
+        run: adb logcat -d > logcat.txt
+
       - name: Upload integration logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -156,3 +241,4 @@ jobs:
           path: |
             server/mock_server.log
             build/**
+            logcat.txt

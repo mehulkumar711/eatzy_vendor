@@ -4,6 +4,7 @@ plugins {
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
     id("kotlin-kapt")
+    id("jacoco")
 }
 
 android {
@@ -38,7 +39,34 @@ android {
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
+        debug {
+            isTestCoverageEnabled = true
+        }
     }
+}
+
+jacoco {
+    toolVersion = "0.8.10"
+}
+
+tasks.register<JacocoReport>("jacocoTestReport") {
+    dependsOn("connectedDebugAndroidTest")
+    
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+
+    val debugTree = fileTree("${project.buildDir}/intermediates/javac/debug/classes") {
+        exclude("**/R.class", "**/BuildConfig.*")
+    }
+    val mainSrc = "${project.projectDir}/src/main/java"
+
+    sourceDirectories.setFrom(files(mainSrc))
+    classDirectories.setFrom(files(debugTree))
+    executionData.setFrom(fileTree(project.buildDir) {
+        include("**/*.exec", "**/*.ec")
+    })
 }
 
 flutter {
