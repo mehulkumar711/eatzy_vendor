@@ -1,0 +1,17 @@
+default_platform(:android)
+
+platform :android do
+  desc "Build, sign and upload AAB to Google Play internal track"
+  lane :deploy_internal do |options|
+    gradle(task: "clean")
+    gradle(task: "bundleRelease")
+    
+    upload_to_play_store(
+      track: options[:track] || "internal",
+      json_key: ENV["GOOGLE_PLAY_SERVICE_ACCOUNT"],
+      aab: "app/build/outputs/bundle/release/app-release.aab",
+      skip_upload_images: true,
+      skip_upload_screenshots: false
+    )
+  end
+end

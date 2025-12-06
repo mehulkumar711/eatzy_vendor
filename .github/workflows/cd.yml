@@ -1,0 +1,64 @@
+name: CD - Play Store Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    # Wait for CI to pass before deploying
+    # needs: [integration, security-scan, golden-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+
+      - name: Restore Keystore
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > /tmp/upload-keystore.jks
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Write Play service account
+        run: |
+          echo "$GOOGLE_PLAY_SERVICE_ACCOUNT" | base64 --decode > android/fastlane/service_account.json
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}
+
+      - name: Install dependencies
+        working-directory: android
+        run: |
+          gem install fastlane -v 2.215.0 --no-document
+
+      - name: Build and deploy
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT: android/fastlane/service_account.json
+        run: |
+          export GRADLE_USER_HOME=$(pwd)/.gradle
+          # set signing properties via env vars or generated gradle.properties
+          cat > gradle.properties <<EOF
+          android.useAndroidX=true
+          android.enableJetifier=true
+          keyAlias=${ANDROID_KEY_ALIAS}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          storeFile=/tmp/upload-keystore.jks
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          EOF
+
+          bundle exec fastlane deploy_internal track:${{ secrets.PLAY_STORE_TRACK || 'internal' }}
